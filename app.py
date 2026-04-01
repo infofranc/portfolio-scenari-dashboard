@@ -52,7 +52,7 @@ sezione = st.sidebar.radio("Sezione", ["🏠 Overview", "📈 Portafogli", "🔍
 
 st.sidebar.markdown("---")
 portafogli_sel = st.sidebar.multiselect("Filtra portafogli", list(PORTFOGLI.keys()), default=list(PORTFOGLI.keys())[:3])
-periodo = st.sidebar.selectslider("Periodo", options=["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y"], value="1Y")
+periodo = st.sidebar.select_slider("Periodo", options=["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y"], value="1Y")
 
 if sezione == "🏠 Overview":
     st.title("🏠 Portfolio Scenarios Dashboard")
