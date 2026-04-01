@@ -1,190 +1,141 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+import yfinance as yf
+from datetime import datetime
 
-st.set_page_config(
-    page_title="Portfolio Scenarios Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Portfolio Scenarios Dashboard", page_icon="📊", layout="wide")
 
-# ─────────────────────────────────────────────
-# DATA
-# ─────────────────────────────────────────────
+ETF_TICKERS = ["QQQ", "XLK", "XLY", "IEF", "SMH", "TLT", "SHY", "XLU", "XLP", "GLD", "DBC", "XLE", "TIP", "XLI", "XLF", "IWM", "EEM", "LQD", "VTI", "FXF", "IXUS", "BIL", "XME", "COPX", "IBIT"]
 
-PERIODI = ["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y"]
-
-ETF_INFO = {
-    "QQQ":  {"nome": "Invesco QQQ Trust", "prezzo": 584.31},
-    "XLK":  {"nome": "Technology Select Sector SPDR", "prezzo": 134.91},
-    "XLY":  {"nome": "Cons Disc Sel Sect SPDR", "prezzo": 109.80},
-    "IEF":  {"nome": "iShares 7-10Y Treasury Bond", "prezzo": 95.04},
-    "SMH":  {"nome": "VanEck Semiconductor ETF", "prezzo": 391.97},
-    "TLT":  {"nome": "iShares 20Y Treasury Bond", "prezzo": 86.26},
-    "SHY":  {"nome": "iShares 1-3Y Treasury Bond", "prezzo": 82.32},
-    "XLU":  {"nome": "Utilities Select Sector SPDR", "prezzo": 46.11},
-    "XLP":  {"nome": "Cons Staples Sel Sec SPDR", "prezzo": 81.46},
-    "GLD":  {"nome": "SPDR Gold Trust", "prezzo": 437.82},
-    "DBC":  {"nome": "Invesco DB Commodity Index", "prezzo": 28.68},
-    "XLE":  {"nome": "Energy Select Sector SPDR", "prezzo": 58.97},
-    "TIP":  {"nome": "iShares TIPS Bond ETF", "prezzo": 110.36},
-    "XLI":  {"nome": "Industrial Select Sector SPDR", "prezzo": 164.43},
-    "XLF":  {"nome": "Financial Sel Sec SPDR", "prezzo": 49.44},
-    "IWM":  {"nome": "iShares Russell 2000 ETF", "prezzo": 249.56},
-    "EEM":  {"nome": "iShares MSCI Emerging Markets", "prezzo": 57.23},
-    "LQD":  {"nome": "iShares iBoxx Inv Grade Corp Bond", "prezzo": 108.66},
-    "VTI":  {"nome": "Vanguard Total Stock Market", "prezzo": 323.24},
-    "FXF":  {"nome": "Invesco CurrencyShares Swiss Franc", "prezzo": 111.10},
-    "IXUS": {"nome": "iShares Core MSCI Total Intl Stock", "prezzo": 87.61},
-    "BIL":  {"nome": "SPDR Bloomberg 1-3M T-Bill", "prezzo": 91.40},
-    "XME":  {"nome": "SPDR S&P Metals & Mining", "prezzo": 109.90},
-    "COPX": {"nome": "Global X Copper Miners ETF", "prezzo": 78.15},
-    "IBIT": {"nome": "iShares Bitcoin Trust ETF", "prezzo": 38.64},
-    "VDST": {"nome": "Vanguard US Treasury 0-1Y", "prezzo": 58.74},
-    "SPY":  {"nome": "SPDR S&P 500 ETF Trust", "prezzo": None},
+PORTFOGLI = {
+    "🌟 Goldilocks Economy": ["QQQ", "XLK", "XLY", "IEF", "SMH"],
+    "🔴 Recession": ["TLT", "SHY", "XLU", "XLP", "GLD"],
+    "🌡️ Stagflation": ["GLD", "DBC", "XLE", "TIP", "XLU"],
+    "🔄 Reflation": ["XLI", "XLF", "IWM", "EEM", "DBC"],
+    "🕊️ Disinflation": ["TLT", "LQD", "QQQ", "VTI", "GLD"],
+    "🌍 Dollar Weakness": ["EEM", "FXF", "GLD", "IXUS", "DBC"],
+    "❄️ Deflation": ["TLT", "BIL", "SHY", "XLP", "XLU"],
+    "₿ Debasement + BTC": ["GLD", "XME", "COPX", "EEM", "IBIT"],
+    "💰 Debasement no BTC": ["GLD", "XME", "COPX", "EEM", "SHY"]
 }
 
-# Variazioni % per ETF: [1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y]
-ETF_VARS = {
-    "QQQ":  [-3.91, -4.70, -4.78,  23.61,  31.32,  82.51,  76.50],
-    "XLK":  [-3.32, -6.51, -6.60,  29.72,  29.19,  78.95,  95.13],
-    "XLY":  [-4.87, -7.22, -7.19,  10.06,  20.32,  48.22,  26.73],
-    "IEF":  [-2.14, -1.08, -1.08,  -0.38,   1.61,  -4.38, -15.92],
-    "SMH":  [-3.55,  5.00,  5.55,  84.47,  71.96, 199.56, 204.87],
-    "TLT":  [-3.74, -0.88, -0.86,  -5.72,  -6.80, -19.08, -37.00],
-    "SHY":  [-0.59, -0.65, -0.65,  -0.19,   1.20,   0.29,  -4.51],
-    "XLU":  [-2.66,  6.79,  6.59,  16.65,  41.31,  37.15,  42.58],
-    "XLP":  [-8.17,  4.85,  4.83,  -0.40,   7.54,   8.47,  18.32],
-    "GLD":  [-10.65, 9.93, 11.06,  52.25, 110.67, 137.25, 170.39],
-    "DBC":  [11.12, 28.09, 28.07,  27.41,  24.26,  18.86,  72.36],
-    "XLE":  [3.38,  29.18, 29.96,  25.47,  23.99,  36.22, 140.11],
-    "TIP":  [-1.08,  0.46,  0.45,  -0.08,   3.48,   0.04, -11.85],
-    "XLI":  [-8.09,  4.08,  4.18,  24.75,  31.55,  62.22,  64.43],
-    "XLF":  [-3.63, -9.99,-10.22,  -0.62,  18.02,  53.49,  42.31],
-    "IWM":  [-5.40,  0.31,  0.32,  25.09,  19.80,  39.83,  10.93],
-    "EEM":  [-6.94,  1.76,  1.83,  30.54,  39.08,  44.74,   5.84],
-    "LQD":  [-2.04, -1.36, -1.34,   0.00,   1.11,  -1.16, -16.40],
-    "VTI":  [-4.68, -3.89, -3.96,  17.21,  24.47,  57.96,  52.67],
-    "FXF":  [-1.96, -0.43, -0.43,  10.60,  12.91,  13.79,  14.49],
-    "IXUS": [-5.25,  2.05,  2.10,  25.01,  29.41,  40.36,  21.71],
-    "BIL":  [-0.02, -0.02, -0.03,  -0.02,  -0.08,  -0.11,   None],
-    "XME":  [-9.96,  2.20,  2.43,  96.57,  80.67, 105.50, 169.69],
-    "COPX": [-16.51, 6.97,  8.21,  98.65,  82.89,  98.75, 108.68],
-    "IBIT": [-1.43,-24.15,-17.62, -20.00,  -2.79,   1.44,   None],
-    "VDST": [0.44,   0.98,  0.99,   4.20,   9.41,  15.00,   None],
-    "SPY":  [-4.54, -4.09, -2.09,  29.91,  26.49,  58.29,  56.94],
-}
+@st.cache_data(ttl=3600)
+def get_etf_data(ticker, period="1y"):
+    try:
+        data = yf.Ticker(ticker)
+        hist = data.history(period=period)
+        return hist
+    except:
+        return None
 
-# Portafogli con ETF e variazioni medie
-PORTAFOGLI = {
-    "🌟 Goldilocks Economy": {
-        "color": "#2ecc71",
-        "etf": ["QQQ", "XLK", "XLY", "IEF", "SMH"],
-        "media": [-3.56, -2.90, -2.82, 29.50, 30.88, 80.97, 77.46],
-        "desc": "Crescita solida, inflazione contenuta. Tech, consumi discrezionali, semiconduttori."
-    },
-    "🔴 Recession": {
-        "color": "#e74c3c",
-        "etf": ["TLT", "SHY", "XLU", "XLP", "GLD"],
-        "media": [-5.16, 4.01, 4.19, 12.52, 30.79, 32.82, 37.96],
-        "desc": "Contrazione economica. Rifugi sicuri: Treasury, utility, oro, beni di prima necessità."
-    },
-    "🌡️ Stagflation": {
-        "color": "#e67e22",
-        "etf": ["GLD", "DBC", "XLE", "TIP", "XLU"],
-        "media": [0.02, 14.89, 15.22, 24.34, 40.74, 45.90, 82.72],
-        "desc": "Alta inflazione + bassa crescita. Commodity, energia, oro, TIPS."
-    },
-    "🔄 Reflation": {
-        "color": "#3498db",
-        "etf": ["XLI", "XLF", "IWM", "EEM", "DBC"],
-        "media": [-2.59, 4.85, 4.83, 21.43, 26.54, 43.83, 39.17],
-        "desc": "Ripresa con inflazione in risalita. Industriali, finanziari, small cap, emergenti."
-    },
-    "🕊️ Disinflation/Soft Landing": {
-        "color": "#9b59b6",
-        "etf": ["TLT", "LQD", "QQQ", "VTI", "GLD"],
-        "media": [-5.00, -0.18, 0.02, 17.47, 32.15, 51.50, 49.24],
-        "desc": "Inflazione in calo con atterraggio morbido. Bond + equity."
-    },
-    "🌍 Dollar Weakness / Global Rebalancing": {
-        "color": "#1abc9c",
-        "etf": ["EEM", "FXF", "GLD", "IXUS", "DBC"],
-        "media": [-2.74, 8.28, 8.52, 29.16, 43.27, 51.00, 56.96],
-        "desc": "Dollaro debole, riequilibrio globale. Emergenti, Svizzera, oro, internazionali."
-    },
-    "❄️ Deflation": {
-        "color": "#34495e",
-        "etf": ["TLT", "BIL", "SHY", "XLP", "XLU"],
-        "media": [-3.03, 2.02, 1.98, 2.06, 8.65, 5.35, 3.86],
-        "desc": "Prezzi in calo, bassa crescita. Massima sicurezza: T-Bill, Treasury, defensive equity."
-    },
-    "₿ Debasement Aggressivo (con BTC)": {
-        "color": "#f39c12",
-        "etf": ["GLD", "XME", "COPX", "EEM", "IBIT"],
-        "media": [-9.10, -0.66, 1.18, 51.60, 62.10, 96.56, 113.65],
-        "desc": "Svalutazione valutaria aggressiva. Oro, metalli, rame, BTC."
-    },
-    "💰 Debasement senza BTC": {
-        "color": "#d35400",
-        "etf": ["GLD", "XME", "COPX", "EEM", "VDST"],
-        "media": [-8.72, 4.37, 4.90, 56.44, 64.54, 80.25, None],
-        "desc": "Svalutazione senza esposizione crypto. Oro, metalli, rame, Treasury breve."
-    },
-}
+@st.cache_data(ttl=3600)
+def calc_returns(ticker):
+    periods = {"1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730, "3Y": 1095, "5Y": 1825}
+    returns = {}
+    for name, days in periods.items():
+        try:
+            hist = get_etf_data(ticker, period=f"{days}d")
+            if hist is not None and len(hist) > 1:
+                ret = ((hist['Close'].iloc[-1] / hist['Close'].iloc[0]) - 1) * 100
+                returns[name] = round(ret, 2)
+            else:
+                returns[name] = None
+        except:
+            returns[name] = None
+    return returns
 
-# ─────────────────────────────────────────────
-# SIDEBAR
-# ─────────────────────────────────────────────
-
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Chart_increase.svg/120px-Chart_increase.svg.png", width=60)
 st.sidebar.title("📊 Portfolio Scenarios")
 st.sidebar.markdown("---")
 
-sezione = st.sidebar.radio(
-    "Sezione",
-    ["🏠 Overview", "📈 Portafogli nel tempo", "🔍 Singole componenti", "⚖️ Confronto strategie", "📋 Tabella dati"]
-)
+sezione = st.sidebar.radio("Sezione", ["🏠 Overview", "📈 Portafogli", "🔍 Singoli ETF", "⚖️ Confronto"])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("**Filtra portafogli**")
-portafogli_sel = st.sidebar.multiselect(
-    "Seleziona scenari",
-    list(PORTAFOGLI.keys()),
-    default=list(PORTAFOGLI.keys())
-)
+portafogli_sel = st.sidebar.multiselect("Filtra portafogli", list(PORTFOGLI.keys()), default=list(PORTFOGLI.keys())[:3])
+periodo = st.sidebar.selectslider("Periodo", options=["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y"], value="1Y")
 
-periodo_sel = st.sidebar.select_slider(
-    "Orizzonte temporale",
-    options=PERIODI,
-    value="1Y"
-)
+if sezione == "🏠 Overview":
+    st.title("🏠 Portfolio Scenarios Dashboard")
+    st.markdown("### Analisi portafogli per scenari macro")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Portafogli totali", len(PORTFOGLI))
+    with col2:
+        st.metric("ETF monitorati", len(ETF_TICKERS))
+    with col3:
+        st.metric("Periodo selezionato", periodo)
+    
+    st.markdown("---")
+    for nome, tickers in list(PORTFOGLI.items())[:3]:
+        with st.expander(f"{nome}"):
+            st.write(f"**ETF**: {', '.join(tickers)}")
+            
+elif sezione == "📈 Portafogli":
+    st.title("📈 Andamento Portafogli")
+    
+    for nome in portafogli_sel:
+        st.subheader(nome)
+        tickers = PORTFOGLI[nome]
+        
+        fig = go.Figure()
+        for ticker in tickers:
+            hist = get_etf_data(ticker, period="1y")
+            if hist is not None:
+                normalized = (hist['Close'] / hist['Close'].iloc[0] - 1) * 100
+                fig.add_trace(go.Scatter(x=hist.index, y=normalized, name=ticker, mode='lines'))
+        
+        fig.update_layout(title=f"Performance {nome}", xaxis_title="Data", yaxis_title="Variazione %", hovermode='x unified')
+        st.plotly_chart(fig, use_container_width=True)
+        
+elif sezione == "🔍 Singoli ETF":
+    st.title("🔍 Analisi Singoli ETF")
+    
+    ticker_sel = st.selectbox("Seleziona ETF", ETF_TICKERS)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        hist = get_etf_data(ticker_sel, period="1y")
+        if hist is not None:
+            fig = go.Figure()
+            fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name=ticker_sel))
+            fig.update_layout(title=f"{ticker_sel} - Candlestick", xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        returns = calc_returns(ticker_sel)
+        st.markdown("#### Performance")
+        for period, value in returns.items():
+            if value is not None:
+                color = "green" if value >= 0 else "red"
+                st.markdown(f"**{period}**: :{color}[{value:+.2f}%]")
+                
+elif sezione == "⚖️ Confronto":
+    st.title("⚖️ Confronto Strategie")
+    
+    if len(portafogli_sel) > 0:
+        fig = go.Figure()
+        
+        for nome in portafogli_sel:
+            tickers = PORTFOGLI[nome]
+            portfolio_data = []
+            
+            for ticker in tickers:
+                hist = get_etf_data(ticker, period="1y")
+                if hist is not None:
+                    portfolio_data.append(hist['Close'])
+            
+            if portfolio_data:
+                avg_portfolio = pd.concat(portfolio_data, axis=1).mean(axis=1)
+                normalized = (avg_portfolio / avg_portfolio.iloc[0] - 1) * 100
+                fig.add_trace(go.Scatter(x=avg_portfolio.index, y=normalized, name=nome, mode='lines'))
+        
+        fig.update_layout(title="Confronto Performance Portafogli", xaxis_title="Data", yaxis_title="Variazione %", hovermode='x unified')
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Seleziona almeno un portafoglio dalla sidebar")
 
-# ─────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────
-
-def get_portafoglio_df():
-    rows = []
-    for nome, info in PORTAFOGLI.items():
-        row = {"Portafoglio": nome, "Colore": info["color"]}
-        for i, p in enumerate(PERIODI):
-            row[p] = info["media"][i]
-        rows.append(row)
-    return pd.DataFrame(rows)
-
-def get_etf_df():
-    rows = []
-    for ticker, vals in ETF_VARS.items():
-        row = {"Ticker": ticker, "Nome": ETF_INFO.get(ticker, {}).get("nome", ticker)}
-        for i, p in enumerate(PERIODI):
-            row[p] = vals[i] if i < len(vals) else None
-        rows.append(row)
-    return pd.DataFrame(rows)
-
-def colore_val(val):
-    if val is None: return "gray"
-    return "#2ecc71" if val >= 0 else "#e74c3c"
+st.sidebar.markdown("---")
+st.sidebar.caption("📊 Dati da Yahoo Finance")
+st.sidebar.caption(f"🔄 Aggiornato: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
